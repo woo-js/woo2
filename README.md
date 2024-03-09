@@ -1,2 +1,3 @@
-# woo2
-webcomponents  library
+## WOO2 WebCompones Framework
+![](/resources/woo-logo.png)
+
