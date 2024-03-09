@@ -4,7 +4,7 @@
   "description": "woo web components framework",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "pub": "cd dist && npm --registry \"https://registry.npmjs.org/\" publish --access public"
   },
   "keywords": ["webcomponents", "woo", "woojs", "web","components"],
   "author": "zhfjyq@gmail.com",
