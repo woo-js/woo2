@@ -1,0 +1,12 @@
+{
+  "name": "@woojs/woo",
+  "version": "2.0.0",
+  "description": "woo web components framework",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": ["webcomponents", "woo", "woojs", "web","components"],
+  "author": "zhfjyq@gmail.com",
+  "license": "MIT"
+}
