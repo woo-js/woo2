@@ -1,12 +1,31 @@
 {
   "name": "@woojs/woo",
-  "version": "2.0.0",
+  "version": "2.0.4",
   "description": "woo web components framework",
   "main": "index.js",
   "scripts": {
+    "dev": "webpack serve -c ./webpack/dev.config.js",
+    "types": "webpack -c ./webpack/dev.config.js ",
+    "build": "webpack -c ./webpack/build.config.js",
     "pub": "cd dist && npm --registry \"https://registry.npmjs.org/\" publish --access public"
   },
-  "keywords": ["webcomponents", "woo", "woojs", "web","components"],
+  "keywords": [
+    "webcomponents",
+    "woo",
+    "woojs",
+    "web",
+    "components"
+  ],
   "author": "zhfjyq@gmail.com",
-  "license": "MIT"
+  "license": "MIT",
+  "devDependencies": {
+    "terser-webpack-plugin": "^5.3.10",
+    "ts-loader": "^9.5.1",
+    "typescript": "^5.4.2",
+    "webpack": "^5.90.3",
+    "webpack-cli": "^5.1.4",
+    "copy-webpack-plugin": "^12.0.2",
+    "webpack-dev-server": "^5.0.2"
+  },
+  "dependencies": {}
 }
