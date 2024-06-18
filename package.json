@@ -1,0 +1,6 @@
+{
+	"devDependencies": {
+		"esbuild": "^0.21.5",
+		"woo2": "link:"
+	}
+}

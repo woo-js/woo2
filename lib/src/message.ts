@@ -20,7 +20,8 @@ type IMessageType = keyof IMessages
  * 消息类型定义,"W:"为Worker线程消息,"M:"为主线程消息
  */
 interface IMessages {
-    // ======= 主线程发起事件，工作线程响应 =========
+        //========= 工作线程发起事件，主线程响应 =========
+
     // 当Worker线程准备好时,发送此消息,通知主线程Worker启动完成
     'W:Ready': {
         send: {},
@@ -39,8 +40,7 @@ interface IMessages {
     }
 
 
-    //========= 工作线程发起事件，主线程响应 =========
-
+    // ======= 主线程发起事件，工作线程响应 =========
     // 更新全局meta属性
     'M:SetMeta': {
         send: {
@@ -49,7 +49,7 @@ interface IMessages {
         },
         reply: {}
     },
-    // 请求加载元素,传入请求加载的元素标签和属性,一般用于在首页加载固定元素
+    // 请求加载元素,传入请求加载的元素标签和属性,一般用于在首页加载固定元素或者独立元素(无父元素)
     'M:LoadElem': {
         send: { tag: string, attrs: { [k: string]: string }, relUrl: string },
         reply: { tag: string, attrs: { [key: string]: string }, content: string }

@@ -67,7 +67,7 @@ class WAttr {
         }
     }
     // 计算属性值
-    _computeValue() {
+    private _computeValue() {
         if (this._computeFuncFactory) {
             try {
                 let rt = this._computeFuncFactory()

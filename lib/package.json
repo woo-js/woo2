@@ -4,12 +4,9 @@
   "description": "woo web components framework",
   "main": "index.js",
   "scripts": {
-    "dev": "webpack serve -c ./webpack/dev.config.js",
-    "w":"esbuild src/index.ts src/worker/worker.ts --bundle --outdir=build  --sourcemap=inline  --watch --servedir=. --format=iife",
-    "d":"esbuild src/index.ts  src/worker.ts --bundle --outdir=./dev/woo/ --sourcemap=inline --format=iife",
-    "b":"esbuild src/index.ts  src/worker.ts --bundle --minify --outdir=./dist/ --analyze ",
-    "types": "webpack -c ./webpack/dev.config.js ",
-    "build": "webpack -c ./webpack/build.config.js",
+    "w": "esbuild src/index.ts src/worker/worker.ts --bundle --outdir=build  --sourcemap=inline  --watch --servedir=. --format=iife",
+    "d": "esbuild src/index.ts  src/worker/worker.ts --bundle --outdir=./dev/woo/ --sourcemap=inline --format=iife",
+    "b": "esbuild src/index.ts  src/worker.ts --bundle --minify --outdir=./dist/ --analyze ",
     "pub": "cd dist && npm --registry \"https://registry.npmjs.org/\" publish --access public",
     "test": "jest",
     "test-c": "jest --coverage --coverageDirectory=../coverage"
@@ -24,16 +21,7 @@
   "author": "zhfjyq@gmail.com",
   "license": "MIT",
   "devDependencies": {
-    "@jest/globals": "^29.7.0",
-    "@types/jest": "^29.5.12",
-    "copy-webpack-plugin": "^12.0.2",
-    "jest": "^29.7.0",
-    "terser-webpack-plugin": "^5.3.10",
-    "ts-jest": "^29.1.2",
-    "ts-loader": "^9.5.1",
-    "typescript": "^5.4.2",
-    "webpack": "^5.90.3",
-    "webpack-cli": "^5.1.4",
-    "webpack-dev-server": "^5.0.2"
+    "cypress": "^13.11.0",
+    "typescript": "^5.4.2"
   }
 }
