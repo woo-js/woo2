@@ -162,7 +162,7 @@ describe('WorkScope作用域', () => {
         // debugger
         scope.$rootScope.obj3 = { a: 1, b: 2, c: 3 , d: { d1: 11, d2: 12, d3: 13, e: { e1: 21, e2: 22, e3: 23 } }};
         scope.traceCall(
-          'test-call-obj3.a',
+          'test-call-obj3.d.e.e1',
           () => {
             return scope.$rootScope.obj3.d.e.e1;
           },
