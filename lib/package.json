@@ -8,8 +8,6 @@
     "d": "esbuild src/index.ts  src/worker/worker.ts --bundle --outdir=./dev/woo/ --sourcemap=inline --format=iife",
     "b": "esbuild src/index.ts  src/worker.ts --bundle --minify --outdir=./dist/ --analyze ",
     "pub": "cd dist && npm --registry \"https://registry.npmjs.org/\" publish --access public",
-    "test": "jest",
-    "test-c": "jest --coverage --coverageDirectory=../coverage"
   },
   "keywords": [
     "webcomponents",
