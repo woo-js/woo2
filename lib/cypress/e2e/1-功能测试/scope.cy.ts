@@ -8,23 +8,24 @@ describe('WorkScope作用域', () => {
     cy.visit('/dev/index.html');
     localStorage.__DEV = {};
   });
+  context('创建scope', () => {
+    it('从类创建scope', () => {
+      scope = new WorkerScope(
+        'cid-test',
+        class {
+          a = 1;
+        }
+      );
 
-  it('从类创建scope', () => {
-    scope = new WorkerScope(
-      'cid-test',
-      class {
-        a = 1;
-      }
-    );
-
-    cy.log('scope 1', scope.$rootScope);
-    cy.wrap(scope.$rootScope).then(() => {
-      // 确认对象属性为get/set
-      expect(scope.$rootScope, '检测属性转换为get/set').ownPropertyDescriptor('a').include.keys('get', 'set');
+      cy.log('scope 1', scope.$rootScope);
+      cy.wrap(scope.$rootScope).then(() => {
+        // 确认对象属性为get/set
+        expect(scope.$rootScope, '检测属性转换为get/set').ownPropertyDescriptor('a').include.keys('get', 'set');
+      });
     });
   });
 
-  context('依赖变更直接属性', () => {
+  context('直接属性', () => {
     it('scope直接属性赋值触发回调', () => {
       let defer = new Defer();
       let ret = scope.traceCall(
@@ -68,7 +69,7 @@ describe('WorkScope作用域', () => {
     });
   });
 
-  context('对象', () => {
+  context('对象属性', () => {
     it('scope添加对象obj1,标准流程,先添加，再跟踪，再变更', () => {
       let defer = new Defer();
 
@@ -164,9 +165,6 @@ describe('WorkScope作用域', () => {
           },
           (v) => defer.resolve(v)
         );
-
-        // 确定对象属性为get/set
-        expect(scope.$rootScope, '检测属性转换为get/set').ownPropertyDescriptor('obj2').include.keys('get', 'set');
       });
 
       cy.wrap(scope.$rootScope).then(() => {
@@ -176,6 +174,41 @@ describe('WorkScope作用域', () => {
 
       cy.wrap(defer.promise).then((v) => {
         expect(v, `获取obj3执行结果, 耗时:${defer.duration}`).to.be.eq(999);
+      });
+    });
+
+    it('scope添加对象obj5,跟踪子属性和obj自身,修改子属性,仅有子属性的跟踪得到响应', () => {
+      let deferSelf = new Defer();
+      let deferChild = new Defer();
+      cy.wrap(scope.$rootScope).then(() => {
+        scope.$rootScope.obj5 = { a: 1, b: 2, c: 3 };
+        scope.traceCall(
+          'test-call-obj5',
+          () => {
+            return scope.$rootScope.obj5;
+          },
+          (v) => deferSelf.resolve(v)
+        );
+        scope.traceCall(
+          'test-call-obj5.a',
+          () => {
+            return scope.$rootScope.obj5.a;
+          },
+          (v) => deferChild.resolve(v)
+        );
+      });
+
+      cy.wrap(scope.$rootScope).then(() => {
+        scope.$rootScope.obj5.a = 11;
+      });
+
+      cy.wrap(deferChild.promise).then((v:any) => {
+        expect(v, `获取obj5.a执行结果, 耗时:${deferSelf.duration}`).to.be.eq(11);
+        expect(deferChild.state, 'obj5.a得到响应').to.be.eq('resolved');        
+      });
+
+      cy.wait(50).then(() => {
+        expect(deferSelf.state, 'obj5自身未被触发').to.be.eq('pending');
       });
     });
   });

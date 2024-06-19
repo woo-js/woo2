@@ -3,6 +3,7 @@
 export class Defer<T> {
   private _resolve: Function;
   private _reject: Function;
+  private _state: 'pending' | 'resolved' | 'rejected' = 'pending';
   private _promise: Promise<T>;
     private _start: number;
     private _end: number;
@@ -15,14 +16,19 @@ export class Defer<T> {
         });
     }
     resolve(value: T) {
+        this._state = 'resolved';
         this._end = Date.now();
         this._duration = this._end - this._start;
         this._resolve(value);
     }
     reject(reason: any) {
+        this._state = 'rejected';
         this._end = Date.now();
         this._duration = this._end - this._start;
         this._reject(reason);
+    }
+    get state() {
+        return this._state;
     }
     get promise() {
         return this._promise;
