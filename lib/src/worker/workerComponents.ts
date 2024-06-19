@@ -141,7 +141,7 @@ class WElem {
     // 从ElemJson构造WElem
     constructor(private _componentRoot: WorkerComponent, private _parent: WElem | undefined, tplElem: IElemJson) {
         this._tag = tplElem.tag
-        this._workScope = new WorkerScope(this.indentify, {}, this._parent?._workScope)
+        this._workScope = new WorkerScope(this.indentify, {})
 
         // 解析和处理属性
         this._initAttrs(tplElem)

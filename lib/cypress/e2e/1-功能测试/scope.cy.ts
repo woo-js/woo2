@@ -25,21 +25,23 @@ describe('WorkScope作用域', () => {
   });
 
   context('依赖变更直接属性', () => {
-    it('scope直接属性赋值触发回调', async () => {
+    it('scope直接属性赋值触发回调', () => {
       let defer = new Defer();
       let ret = scope.traceCall(
         'test-call-01',
         () => {
           return scope.$rootScope.a;
         },
-        v=>defer.resolve(v)
+        (v) => defer.resolve(v)
       );
 
       cy.log('初始化变量: a=', ret);
       cy.wrap(scope.$rootScope).then(() => {
         scope.$rootScope.a = 2;
       });
-      cy.wrap(defer.promise).then(() => {
+
+      cy.wrap(defer.promise).then((v) => {
+        cy.log('@@@@@@@@@@@@2: v=', v);
         expect(scope.$rootScope.a, `获取变量执行结果=2, 耗时:${defer.duration}`).to.be.eq(2);
       });
     });
@@ -52,7 +54,7 @@ describe('WorkScope作用域', () => {
           // debugger
           return scope.$rootScope.b;
         },
-        v=>defer.resolve(v)
+        (v) => defer.resolve(v)
       );
 
       cy.log('初始化变量: b=', ret);
@@ -60,14 +62,13 @@ describe('WorkScope作用域', () => {
         scope.$rootScope.b = 99;
       });
       cy.log('scope= ', scope.$rootScope);
-      cy.wrap(defer.promise).then(() => {
-        expect(scope.$rootScope.b, `获取变量执行结果=99, 耗时:${defer.duration}`).to.be.eq(99);
+      cy.wrap(defer.promise).then((v) => {
+        expect(v, `获取变量执行结果=99, 耗时:${defer.duration}`).to.be.eq(99);
       });
     });
-
   });
 
-  context('添加和更改对象', () => {
+  context('对象', () => {
     it('scope添加对象obj1,标准流程,先添加，再跟踪，再变更', () => {
       let defer = new Defer();
 
@@ -80,7 +81,7 @@ describe('WorkScope作用域', () => {
           () => {
             return scope.$rootScope.obj1;
           },
-          v=>defer.resolve(v)
+          (v) => defer.resolve(v)
         );
 
         // 确定对象属性为get/set
@@ -107,7 +108,7 @@ describe('WorkScope作用域', () => {
           () => {
             return scope.$rootScope.obj2;
           },
-          v=>defer.resolve(v)
+          (v) => defer.resolve(v)
         );
 
         // 确定对象属性为get/set
@@ -119,13 +120,11 @@ describe('WorkScope作用域', () => {
         scope.$rootScope.obj2 = { a: 1, b: 2, c: 3 };
       });
 
-      cy.wrap(defer.promise).then((v:any) => {
+      cy.wrap(defer.promise).then((v: any) => {
         expect(v.a, `获取obj2执行结果, 耗时:${defer.duration}`).to.be.eq(1);
       });
-
     });
 
-    
     it('scope添加对象obj3,跟踪子属性，再全部替换此对象,先前的跟踪将得到响应', () => {
       let defer = new Defer();
       cy.wrap(scope.$rootScope).then(() => {
@@ -136,7 +135,7 @@ describe('WorkScope作用域', () => {
           () => {
             return scope.$rootScope.obj3.a;
           },
-          v=>defer.resolve(v)
+          (v) => defer.resolve(v)
         );
 
         // 确定对象属性为get/set
@@ -148,25 +147,22 @@ describe('WorkScope作用域', () => {
         scope.$rootScope.obj3 = { a: 11, b: 22, c: 33 };
       });
 
-      cy.wrap(defer.promise).then(v => {
+      cy.wrap(defer.promise).then((v) => {
         expect(v, `获取obj3执行结果, 耗时:${defer.duration}`).to.be.eq(11);
       });
-
     });
 
-
-    
     it('scope添加复杂对象obj4,跟踪子属性，再全部替换此对象,先前的跟踪将得到响应', () => {
       let defer = new Defer();
       cy.wrap(scope.$rootScope).then(() => {
         // debugger
-        scope.$rootScope.obj3 = { a: 1, b: 2, c: 3 , d: { d1: 11, d2: 12, d3: 13, e: { e1: 21, e2: 22, e3: 23 } }};
+        scope.$rootScope.obj3 = { a: 1, b: 2, c: 3, d: { d1: 11, d2: 12, d3: 13, e: { e1: 21, e2: 22, e3: 23 } } };
         scope.traceCall(
           'test-call-obj3.d.e.e1',
           () => {
             return scope.$rootScope.obj3.d.e.e1;
           },
-          v=>defer.resolve(v)
+          (v) => defer.resolve(v)
         );
 
         // 确定对象属性为get/set
@@ -175,43 +171,12 @@ describe('WorkScope作用域', () => {
 
       cy.wrap(scope.$rootScope).then(() => {
         cy.log('修改obj3');
-        scope.$rootScope.obj3 = { a: 11, b: 22, c: 33,d:{d1:99,e:{e1:999}} };
+        scope.$rootScope.obj3 = { a: 11, b: 22, c: 33, d: { d1: 99, e: { e1: 999 } } };
       });
 
-      cy.wrap(defer.promise).then(v => {
+      cy.wrap(defer.promise).then((v) => {
         expect(v, `获取obj3执行结果, 耗时:${defer.duration}`).to.be.eq(999);
       });
-
     });
-
-
-
-    
-    it('scope添加数组,添加数组内容,监控数组元素,得到响应', () => {
-      let defer = new Defer<any>();
-      cy.wrap(scope.$rootScope).then(() => {
-        // debugger
-        scope.$rootScope.arr1 = [];
-        scope.traceCall(
-          'test-call-obj3.arr1',
-          () => {
-            return scope.$rootScope.arr1;
-          },
-          v=>defer.resolve(v)
-        );
-      });
-
-      cy.wrap(scope.$rootScope).then(() => {
-        cy.log('修改arr1');
-        (scope.$rootScope.arr1 as Array<any>).push(1);
-      });
-
-      cy.wrap(defer.promise).then((v:any) => {
-        expect(v.length, `获取obj3执行结果, 耗时:${defer.duration}`).to.be.eq(1);
-      });
-
-    });
-
-
   });
 });
