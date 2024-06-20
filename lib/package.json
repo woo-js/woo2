@@ -8,8 +8,8 @@
     "d": "esbuild src/index.ts  src/worker/worker.ts --bundle --outdir=./dev/woo/ --sourcemap=inline --format=iife",
     "b": "esbuild src/index.ts  src/worker.ts --bundle --minify --outdir=./dist/ --analyze ",
     "pub": "cd dist && npm --registry \"https://registry.npmjs.org/\" publish --access public",
-    "test": "npx cypress open",
-    "postinstall": "pnpm i -g esbuild cypress typescript"
+    "test": "cypress open",
+    "init-global":"pnpm i -g cypress esbuild typescript"
   },
   "keywords": [
     "webcomponents",
@@ -21,5 +21,6 @@
   "author": "zhfjyq@gmail.com",
   "license": "MIT",
   "devDependencies": {
+    "typescript": "^5.4.5"
   }
 }
