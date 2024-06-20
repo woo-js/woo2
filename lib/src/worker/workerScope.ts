@@ -222,8 +222,8 @@ export class WorkerScope {
       log.warn('not observer object', obj);
       return;
     }
-    // 如果已经应用过当前属性的get/set,则退出不再处理
-    if (dependents.getPropDependents(prop)) return;
+    // 如果已经应用过当前属性的get/set,则退出不再重复处理
+    // if (dependents.getPropDependents(prop)) return;
 
     // 获取属性描述,如果当前属性不存在则创建
     let desc = Reflect.getOwnPropertyDescriptor(obj, prop);
@@ -246,6 +246,8 @@ export class WorkerScope {
         return v;
       },
       set(value) {
+        log.info('ObjectSet', obj, prop, value);
+
         _this._noticePropChanged(obj, prop);
 
         // 设置新值
@@ -333,6 +335,8 @@ export class WorkerScope {
               return true;
             }
 
+            log.info('ObjectNewProp', obj, prop, value);
+
             let oldValue = Reflect.get(obj, prop);
 
             // 设置新属性,将新属性设置到原始对象中,并启动跟踪和触发变更通知
@@ -342,7 +346,6 @@ export class WorkerScope {
               enumerable: true,
               configurable: true,
             });
-            log.info('newProperty', obj, prop, value);
 
             // 创建get/set函数以进行跟踪
             _this._makeObjectPropGetSet(obj, prop);
@@ -450,6 +453,7 @@ export class WorkerScope {
               let ret = Reflect.apply(v, target, []);
               // 通知弹出的数组成员变更
               _this._noticePropChanged(target, '0');
+              // 所有现有成员需要通知变更
               // 通知数组自身变更
               _this._noticeSelfChanged(target);
               return ret;
@@ -572,13 +576,13 @@ export class WorkerScope {
   private _makeObserver(obj: any): any {
     if (typeof obj !== 'object' || obj === null) return obj;
     if (Reflect.getOwnPropertyDescriptor(obj, SymObjectObserver)) return obj;
+    // return obj;
     // 定义观察对象
     Reflect.defineProperty(obj, SymObjectObserver, {
       value: new ScopeDependents(this._scopeName),
       writable: false,
       enumerable: false,
     });
-
     // 定义对象属性初始化描述
     Reflect.defineProperty(obj, SymObjectInitPropDesc, {
       value: {},

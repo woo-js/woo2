@@ -45,7 +45,8 @@ describe('WorkScope作用域', () => {
       });
 
       cy.wrap(defer.promise).then((v) => {
-        cy.log('@@@@@@@@@@@@2: v=', v);
+        cy.log('变更后的值: v=', v);
+        cy.log('$rootScope: ', scope.$rootScope);
         expect(scope.$rootScope.a, `获取变量执行结果=2, 耗时:${defer.duration}`).to.be.eq(2);
       });
     });
@@ -66,7 +67,6 @@ describe('WorkScope作用域', () => {
         expect(scope.$rootScope, '监控不存在属性时,ownerPropertyDescriptor应为空').not.ownPropertyDescriptor('b');
       });
 
-
       cy.log('初始化变量: b=', ret);
       cy.wrap(scope.$rootScope).then(() => {
         scope.$rootScope.b = 99;
@@ -75,6 +75,64 @@ describe('WorkScope作用域', () => {
       cy.wrap(defer.promise).then((v) => {
         expect(v, `获取变量执行结果=99, 耗时:${defer.duration}`).to.be.eq(99);
       });
+    });
+
+    
+    it('scope监控属性,短时间内变更多次,仅执行一次变化通知', () => {
+      let defer = new Defer();
+      let ret = scope.traceCall(
+        'test-call-03',
+        () => {
+          return scope.$rootScope.c;
+        },
+        (v) => defer.resolve(v)
+      );
+
+      cy.log('初始化变量: c=', ret);
+      cy.wrap(scope.$rootScope).then(() => {
+        scope.$rootScope.c = 1;
+        scope.$rootScope.c = 2;
+        scope.$rootScope.c = 3;
+      });
+      
+      cy.wait(100)
+
+      cy.wrap(defer.promise).then((v) => {
+        expect(v, `获取变量执行结果=3, 耗时:${defer.duration}`).to.be.eq(3);
+      });
+
+    });
+
+    it('scope监控属性,一定时间内变更多次,执行多次变更公职', () => {
+      let callbackCounter = 0;
+      let ret = scope.traceCall(
+        'test-call-04',
+        () => {
+          return scope.$rootScope.d;
+        },
+        (v) => {
+          callbackCounter++;
+        }
+      );
+
+      cy.log('初始化变量: d=', ret);
+      cy.wrap(scope.$rootScope).then(() => {
+        scope.$rootScope.d = 11;
+      });
+      cy.wait(50)
+      cy.wrap(scope.$rootScope).then(() => {
+        scope.$rootScope.d = 22;
+      });
+      cy.wait(50)
+      cy.wrap(scope.$rootScope).then(() => {
+        scope.$rootScope.d = 33;
+      });
+
+      cy.wait(100)
+      cy.wrap(null).then(() => {
+        expect(callbackCounter, `变量执行次数=${callbackCounter}`).to.be.eq(3);
+      });
+
     });
   });
 
