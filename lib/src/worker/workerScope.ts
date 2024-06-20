@@ -400,8 +400,7 @@ export class WorkerScope {
     // 为obj创建代理对象,监控deleteProperty动作
     // 注意: 此监控行为无法监控到对象内部使用this对象的delete操作
 
-
-    return new Proxy(obj,{
+    return new Proxy(obj, {
       deleteProperty(target, p) {
         log.info('deleteProperty', target, p);
         // 删除对象
@@ -413,7 +412,7 @@ export class WorkerScope {
         _this._noticeSelfChanged(target);
 
         return true;
-      }
+      },
     });
   }
   private _makeObserverArray(arr: any[]): any {
@@ -425,7 +424,7 @@ export class WorkerScope {
         if (typeof prop != 'string') return v;
         if (typeof v === 'function') {
           // 处理数组成员函数
-          if (prop === 'push'){
+          if (prop === 'push') {
             return (...args: any[]) => {
               let ret = Reflect.apply(v, target, args);
               // 通知数组自身变更
@@ -436,15 +435,120 @@ export class WorkerScope {
               }
               return ret;
             };
-          }else if (prop === 'pop'){
+          } else if (prop === 'pop') {
             return () => {
               let ret = Reflect.apply(v, target, []);
+              // 通知弹出的数组成员变更
+              _this._noticePropChanged(target, (target.length - 1).toString());
+
               // 通知数组自身变更
               _this._noticeSelfChanged(target);
               return ret;
             };
+          } else if (prop === 'shift') {
+            return () => {
+              let ret = Reflect.apply(v, target, []);
+              // 通知弹出的数组成员变更
+              _this._noticePropChanged(target, '0');
+              // 通知数组自身变更
+              _this._noticeSelfChanged(target);
+              return ret;
+            };
+          } else if (prop === 'unshift') {
+            return (...args: any[]) => {
+              let ret = Reflect.apply(v, target, args);
+              // 通知数组自身变更
+              _this._noticeSelfChanged(target);
+              // 跟踪新增加的数组成员
+              for (let i = 0; i < args.length; i++) {
+                _this._traceObjectProp(target, i.toString());
+              }
+              return ret;
+            };
+          } else if (prop === 'splice') {
+            return (...args: any[]) => {
+              // splice操作,仅通知变化的元素和自身
+              let ret = Reflect.apply(v, target, args);
+              let start = args[0];
+              if (start < 0) start = target.length + start;
+              let deleteCount = args[1];
+              if (deleteCount < 0) deleteCount = 0;
+              let addCount = args.length - 2;
+              if (addCount < 0) addCount = 0;
+              let changedCount = Math.max(deleteCount, addCount);
+              // 通知变化的元素
+              for (let i = 0; i < changedCount; i++) {
+                _this._noticePropChanged(target, (start + i).toString());
+              }
+              // 通知数组自身变更
+              _this._noticeSelfChanged(target);
+              return ret;
+            };
+          } else if (prop === 'reverse' || prop === 'sort') {
+            return (...args: any[]) => {
+              let oldLength = target.length;
+
+              let ret = Reflect.apply(v, target, args);
+              // 通知数组全部元素变更
+              let changedCount = Math.max(oldLength, target.length);
+              for (let i = 0; i < changedCount; i++) {
+                _this._noticePropChanged(target, i.toString());
+              }
+              // 通知数组自身变更
+              _this._noticeSelfChanged(target);
+              return ret;
+            };
+          } else if (prop === 'copyWithin') {
+            return (...args: any[]) => {
+              // 根据参数获取受影响的元素集合
+              let targetIndex = args[0];
+              let start = args[1];
+              if (start < 0) start = target.length + start;
+              let end = args[2];
+              if (end === undefined) end = target.length - start;
+              if (end < 0) end = target.length + end;
+              let changedCount = Math.min(end - start, target.length - targetIndex);
+
+              let ret = Reflect.apply(v, target, args);
+
+              // 通知变化的元素
+              for (let i = 0; i < changedCount; i++) {
+                _this._noticePropChanged(target, (targetIndex + i).toString());
+              }
+
+              // 通知数组自身变更
+              _this._noticeSelfChanged(target);
+              return ret;
+            };
+          } else if (prop === 'fill') {
+            return (...args: any[]) => {
+              let targetIndex = args[1];
+              let end = args[2];
+              if (end === undefined) end = target.length;
+              if (end < 0) end = target.length + end;
+              let changedCount = Math.min(end - targetIndex, target.length - targetIndex);
+
+              let ret = Reflect.apply(v, target, args);
+
+              // 通知变化的元素
+              for (let i = 0; i < changedCount; i++) {
+                _this._noticePropChanged(target, (targetIndex + i).toString());
+              }
+
+              // 通知数组自身变更
+              _this._noticeSelfChanged(target);
+              return ret;
+            };
+          } else {
+            // 跟踪函数名指定的属性,并在被调用时通知属性变化通知以获取最新值
+            _this._traceObjectProp(target, prop.toString());
+
+            return (...args: any[]) => {
+              let ret = Reflect.apply(v, target, args);
+              _this._noticePropChanged(target, prop.toString());
+              return ret;
+            }
           }
-          return v;
         }
         // 处理数组成员属性
         _this._traceObjectProp(arr, prop.toString());
