@@ -318,15 +318,6 @@ export class WorkerScope {
             // 在原型获取属性时,添加跟踪对象
             if (typeof prop !== 'string') return undefined;
 
-            // 如果属性不存在,则添加新属性到原始对象中并设置跟踪器对象,创建get/set函数以进行跟踪
-            Reflect.defineProperty(obj, prop, {
-              value: undefined,
-              writable: true,
-              enumerable: true,
-              configurable: true,
-            });
-            _this._makeObjectPropGetSet(obj, prop);
-
             // 跟踪属性调用
             _this._traceObjectProp(obj, prop);
 
@@ -434,7 +425,7 @@ export class WorkerScope {
         if (typeof prop != 'string') return v;
         if (typeof v === 'function') {
           // 处理数组成员函数
-          if (prop === 'push')
+          if (prop === 'push'){
             return (...args: any[]) => {
               let ret = Reflect.apply(v, target, args);
               // 通知数组自身变更
@@ -445,6 +436,14 @@ export class WorkerScope {
               }
               return ret;
             };
+          }else if (prop === 'pop'){
+            return () => {
+              let ret = Reflect.apply(v, target, []);
+              // 通知数组自身变更
+              _this._noticeSelfChanged(target);
+              return ret;
+            };
+          }
           return v;
         }
         // 处理数组成员属性

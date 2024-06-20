@@ -3,9 +3,12 @@ import { WorkerScope, SymObjectObserver, SymScopeProto } from '../../../src/work
 import { Defer } from '../utils.ts';
 
 describe('WorkScope作用域', () => {
-  let scope: WorkerScope;
+  let scope: WorkerScope
   beforeEach(() => {
-    cy.visit('/dev/index.html');
+    // cy.visit('/dev/index.html');
+    scope = new WorkerScope('cid-test', class {
+      a = 1;
+    });
     localStorage.__DEV = {};
   });
   context('创建scope', () => {
@@ -47,6 +50,7 @@ describe('WorkScope作用域', () => {
       });
     });
 
+
     it('scope监控不存在属性,当后续赋值时应能监控到变更', () => {
       let defer = new Defer();
       let ret = scope.traceCall(
@@ -57,6 +61,11 @@ describe('WorkScope作用域', () => {
         },
         (v) => defer.resolve(v)
       );
+
+      cy.wrap(scope.$rootScope).then(() => {
+        expect(scope.$rootScope, '监控不存在属性时,ownerPropertyDescriptor应为空').not.ownPropertyDescriptor('b');
+      });
+
 
       cy.log('初始化变量: b=', ret);
       cy.wrap(scope.$rootScope).then(() => {
@@ -112,8 +121,6 @@ describe('WorkScope作用域', () => {
           (v) => defer.resolve(v)
         );
 
-        // 确定对象属性为get/set
-        expect(scope.$rootScope, '检测属性转换为get/set').ownPropertyDescriptor('obj2').include.keys('get', 'set');
       });
 
       cy.wrap(scope.$rootScope).then(() => {
@@ -137,16 +144,18 @@ describe('WorkScope作用域', () => {
             return scope.$rootScope.obj3.a;
           },
           (v) => defer.resolve(v)
-        );
+        );        
 
         // 确定对象属性为get/set
-        expect(scope.$rootScope, '检测属性转换为get/set').ownPropertyDescriptor('obj2').include.keys('get', 'set');
+        expect(scope.$rootScope, '检测属性转换为get/set').ownPropertyDescriptor('obj3').include.keys('get', 'set');
       });
 
       cy.wrap(scope.$rootScope).then(() => {
         cy.log('修改obj3');
         scope.$rootScope.obj3 = { a: 11, b: 22, c: 33 };
       });
+
+      cy.wait(50)
 
       cy.wrap(defer.promise).then((v) => {
         expect(v, `获取obj3执行结果, 耗时:${defer.duration}`).to.be.eq(11);
@@ -202,9 +211,9 @@ describe('WorkScope作用域', () => {
         scope.$rootScope.obj5.a = 11;
       });
 
-      cy.wrap(deferChild.promise).then((v:any) => {
+      cy.wrap(deferChild.promise).then((v: any) => {
         expect(v, `获取obj5.a执行结果, 耗时:${deferSelf.duration}`).to.be.eq(11);
-        expect(deferChild.state, 'obj5.a得到响应').to.be.eq('resolved');        
+        expect(deferChild.state, 'obj5.a得到响应').to.be.eq('resolved');
       });
 
       cy.wait(50).then(() => {
@@ -242,11 +251,10 @@ describe('WorkScope作用域', () => {
         expect(deferChild.state, 'obj6.a得到响应').to.be.eq('resolved');
       });
 
-      cy.wrap(deferSelf.promise).then((v:any) => {
+      cy.wrap(deferSelf.promise).then((v: any) => {
         expect(v.a, `获取obj6执行结果, 耗时:${deferSelf.duration}`).to.be.eq(11);
         expect(deferSelf.state, 'obj6自身得到响应').to.be.eq('resolved');
       });
-
     });
 
     it('scope添加对象obj7,跟踪子属性,多次变更子属性,仅执行一次变化跟踪', () => {
@@ -271,7 +279,7 @@ describe('WorkScope作用域', () => {
       cy.wrap(defer.promise).then((v) => {
         expect(v, `获取obj7.a执行结果, 耗时:${defer.duration}`).to.be.eq(13);
       });
-    })
+    });
 
     it('scope添加对象obj8,删除子属性,子属性和自身同时得到响应', () => {
       let deferSelf = new Defer();
@@ -295,7 +303,7 @@ describe('WorkScope作用域', () => {
       });
 
       cy.wrap(scope.$rootScope).then(() => {
-        scope.$rootScope.obj8.a=undefined;
+        scope.$rootScope.obj8.a = undefined;
         delete scope.$rootScope.obj8.a;
       });
 
@@ -303,11 +311,100 @@ describe('WorkScope作用域', () => {
         expect(v, `获取obj8.a执行结果, 耗时:${deferSelf.duration}`).to.be.undefined;
       });
 
-      cy.wrap(deferSelf.promise).then((v:any) => {
+      cy.wrap(deferSelf.promise).then((v: any) => {
         cy.log('obj8:', v);
         expect(v.a, `获取obj8执行结果, 耗时:${deferSelf.duration}`).to.be.undefined;
       });
-    })
+    });
+  });
 
+  context('数组属性', () => {
+    it('scope添加数组arr1,跟踪此属性', () => {
+      let defer = new Defer();
+      cy.wrap(scope.$rootScope).then(() => {
+        scope.traceCall(
+          'test-call-arr1',
+          () => {
+            return scope.$rootScope.arr1;
+          },
+          (v) => defer.resolve(v)
+        );
+      });
+
+      cy.wrap(scope.$rootScope).then(() => {
+        scope.$rootScope.arr1 = [];
+      });
+
+      cy.wrap(defer.promise).then((v) => {
+        expect(v, `获取arr1执行结果, 耗时:${defer.duration}`);
+      });
+    });
+
+    it('scope添加数组arr2,push新元素,数组自身得到响应', () => {
+      let defer = new Defer();
+      cy.wrap(scope.$rootScope).then(() => {
+        scope.$rootScope.arr2 = [];
+        scope.traceCall(
+          'test-call-arr2',
+          () => {
+            return scope.$rootScope.arr2;
+          },
+          (v) => defer.resolve(v)
+        );
+      });
+
+      cy.wrap(scope.$rootScope).then(() => {
+        scope.$rootScope.arr2.push(1);
+      });
+      cy.wait(50)
+
+      cy.wrap(defer.promise).then((v) => {
+        expect(v, `获取arr2执行结果, 耗时:${defer.duration}`).to.be.deep.eq([1]);
+      });
+    });
+
+    it('scope添加数组arr2,修改元素内容,仅有元素得到响应,arr自身不会触发', () => {
+      let deferSelf = new Defer();
+      let deferChild = new Defer();
+
+      cy.wrap(scope.$rootScope).then(() => {
+        scope.$rootScope.arr2 = [1, 2, 3];
+        scope.traceCall(
+          'test-call-arr2',
+          () => {
+            return scope.$rootScope.arr2;
+          },
+          (v) => deferSelf.resolve(v)
+        );
+        scope.traceCall(
+          'test-call-arr2[0]',
+          () => {
+            return scope.$rootScope.arr2[0];
+          },
+          (v) => deferChild.resolve(v)
+        );
+      });
+
+      cy.wrap(scope.$rootScope).then(() => {
+        scope.$rootScope.arr2[0] = 11;
+      });
+
+      cy.wait(50)
+
+      cy.wrap(deferChild.promise).then((v) => {
+        expect(v, `获取arr2[0]执行结果, 耗时:${deferSelf.duration}`).to.be.eq(11);
+      });
+      cy.wrap(deferChild).then((v: any) => {
+        expect(deferChild.state, `获取arr2执行状态, 耗时:${deferSelf.duration}`).to.be.eq('resolved');
+      });
+      cy.wrap(deferChild.promise).then((v: any) => {
+        expect(v, `获取arr2[0]执行结果, 耗时:${deferSelf.duration}`).to.be.eq(11);
+      });
+
+      cy.wrap(deferSelf).then((v: any) => {
+        expect(deferSelf.state, `获取arr2执行状态, 耗时:${deferSelf.duration}`).to.be.eq('pending');
+      });
+
+    });
   });
 });
