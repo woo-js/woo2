@@ -15,13 +15,16 @@ export class Defer<T> {
             this._start = Date.now();
         });
     }
+
     resolve(value: T) {
+        if(this._state !== 'pending') throw new Error(`Defer has already been ${this._state}!`);
         this._state = 'resolved';
         this._end = Date.now();
         this._duration = this._end - this._start;
         this._resolve(value);
     }
     reject(reason: any) {
+        if(this._state !== 'pending') throw new Error(`Defer has already been ${this._state}!`);
         this._state = 'rejected';
         this._end = Date.now();
         this._duration = this._end - this._start;

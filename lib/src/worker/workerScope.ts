@@ -132,6 +132,7 @@ export class WorkerScope {
 
   /**
    * 作用域跟踪调用
+   * @TODO: 未来支持多个跟踪对象,也就是当在callFunc中再次调用traceCall时,可进行同步跟踪
    * @param key
    * @param func
    * @returns
@@ -290,54 +291,187 @@ export class WorkerScope {
     }
   }
 
-  private _makeObserverArray(arr: any[]): any {
-      let _this = this;
-      // 创建数组观察对象
-      return new Proxy(arr, {
-        get(target, prop) {
-          let v = Reflect.get(target, prop);
-          if (typeof prop != 'string') return v;
-          if (typeof v === 'function') {
-            // 处理数组成员函数
-            if (prop === 'push')
-              return (...args: any[]) => {
-                let ret = Reflect.apply(v, target, args);
-                // 通知数组自身变更
-                _this._noticeSelfChanged(target);
-                // 跟踪新增加的数组成员
-                for (let i = 0; i < args.length; i++) {
-                  _this._traceObjectProp(target, (target.length - args.length + i).toString());
-                }
-                return ret;
-              };
-            return v;
-          }
-          // 处理数组成员属性
-          _this._traceObjectProp(arr, prop.toString());
-          if (prop === 'length') {
-            _this._traceObjectSelf(arr);
-          }
+  private _makeObserverObject(obj: any): any {
+    // ================== 标准化对象属性处理 ==================
+    let _this = this;
+    // 为对象所有自身属性创建get/set函数
+    Reflect.ownKeys(obj).forEach((k) => {
+      if (typeof k !== 'string') return;
 
-          return v;
-        },
-        set(target, prop, value) {
-          _this._noticePropChanged(target, prop.toString());
-
-          return Reflect.set(arr, prop, _this._makeObserver(value));
-        },
+      // 为对象属性创建get/set函数
+      _this._makeObjectPropGetSet(obj, k);
+    });
+    // 为对象原型创建proxy,以在新建属性时创建观察对象
+    let oldProto = Reflect.getPrototypeOf(obj) || ({} as any);
+    if (typeof oldProto == 'object' && !Object.getOwnPropertyDescriptor(obj, SymScopeProto)) {
+      let newProto = Object.create(oldProto);
+      Object.defineProperty(newProto, SymScopeProto, {
+        value: true,
       });
 
+      Reflect.setPrototypeOf(
+        obj,
+        new Proxy(newProto, {
+          get(target, prop) {
+            // 如果原型存在属性,则直接返回
+            if (Reflect.has(target, prop)) return Reflect.get(target, prop);
+            // 在原型获取属性时,添加跟踪对象
+            if (typeof prop !== 'string') return undefined;
+
+            // 如果属性不存在,则添加新属性到原始对象中并设置跟踪器对象,创建get/set函数以进行跟踪
+            Reflect.defineProperty(obj, prop, {
+              value: undefined,
+              writable: true,
+              enumerable: true,
+              configurable: true,
+            });
+            _this._makeObjectPropGetSet(obj, prop);
+
+            // 跟踪属性调用
+            _this._traceObjectProp(obj, prop);
+
+            return undefined;
+          },
+
+          set(target, prop, value, receiver) {
+            // 如果原型存在属性,则直接返回
+            if (Reflect.has(target, prop)) return Reflect.set(target, prop, value, receiver);
+            if (typeof prop !== 'string') {
+              // 非字符串对象，在原始对象上直接设置新属性
+              Reflect.defineProperty(obj, prop, { value, writable: true, enumerable: true, configurable: true });
+              return true;
+            }
+
+            let oldValue = Reflect.get(obj, prop);
+
+            // 设置新属性,将新属性设置到原始对象中,并启动跟踪和触发变更通知
+            Reflect.defineProperty(obj, prop, {
+              value: _this._makeObserver(value),
+              writable: true,
+              enumerable: true,
+              configurable: true,
+            });
+            log.info('newProperty', obj, prop, value);
+
+            // 创建get/set函数以进行跟踪
+            _this._makeObjectPropGetSet(obj, prop);
+
+            // 通知属性发生变更
+            _this._noticePropChanged(obj, prop);
+            // 当替换属性时,如果原属性为对象,由于整个对象被替换,需要深度递归通知原对象的全部依赖对象
+            // 定义递归访问时间戳,防止循环访问
+            let visitedTicks = new Date().getTime();
+            function _deepNoticeObj(obj: any) {
+              if (typeof obj !== 'object') return;
+
+              let objDependents = obj[SymObjectObserver] as ScopeDependents | undefined;
+              if (!objDependents) return;
+
+              // 防止循环遍历
+              if (Reflect.get(obj, SymObjectVisitTicks) === visitedTicks) return;
+
+              Reflect.defineProperty(obj, SymObjectVisitTicks, { value: visitedTicks });
+
+              // 通知对象自身的依赖
+              _this._noticeSelfChanged(obj);
+
+              Reflect.ownKeys(obj).forEach((k) => {
+                if (typeof k !== 'string') return;
+                // 通知对象的所有属性发生变更
+                _this._noticePropChanged(obj, k);
+                // 递归通知对象的属性
+                let value = Reflect.get(obj, k);
+                _deepNoticeObj(value);
+              });
+            }
+            // 通知监控原始对象的全部依赖对象
+            _deepNoticeObj(oldValue);
+
+            return true;
+          },
+          // 删除属性，需通知当前对象自身的依赖
+          deleteProperty(target, p) {
+            log.info('deleteProperty', obj, p);
+            // 删除对象
+            delete obj[p];
+            if (typeof p !== 'string') return true;
+            // 添加属性的变更通知
+            _this._noticePropChanged(obj, p);
+            // 添加当前对象的变更通知
+            _this._noticeSelfChanged(obj);
+
+            return true;
+          },
+        })
+      );
+    }
+
+    // 为obj创建代理对象,监控deleteProperty动作
+    // 注意: 此监控行为无法监控到对象内部使用this对象的delete操作
+
+
+    return new Proxy(obj,{
+      deleteProperty(target, p) {
+        log.info('deleteProperty', target, p);
+        // 删除对象
+        Reflect.deleteProperty(target, p);
+        if (typeof p !== 'string') return true;
+        // 添加属性的变更通知
+        _this._noticePropChanged(target, p);
+        // 添加当前对象的变更通知
+        _this._noticeSelfChanged(target);
+
+        return true;
+      }
+    });
+  }
+  private _makeObserverArray(arr: any[]): any {
+    let _this = this;
+    // 创建数组观察对象
+    return new Proxy(arr, {
+      get(target, prop) {
+        let v = Reflect.get(target, prop);
+        if (typeof prop != 'string') return v;
+        if (typeof v === 'function') {
+          // 处理数组成员函数
+          if (prop === 'push')
+            return (...args: any[]) => {
+              let ret = Reflect.apply(v, target, args);
+              // 通知数组自身变更
+              _this._noticeSelfChanged(target);
+              // 跟踪新增加的数组成员
+              for (let i = 0; i < args.length; i++) {
+                _this._traceObjectProp(target, (target.length - args.length + i).toString());
+              }
+              return ret;
+            };
+          return v;
+        }
+        // 处理数组成员属性
+        _this._traceObjectProp(arr, prop.toString());
+        if (prop === 'length') {
+          _this._traceObjectSelf(arr);
+        }
+
+        return v;
+      },
+      set(target, prop, value) {
+        _this._noticePropChanged(target, prop.toString());
+
+        return Reflect.set(arr, prop, _this._makeObserver(value));
+      },
+    });
+
+    return arr;
   }
 
   // 将一个对象初始化为可观测对象,此时对象的属性变化会被跟踪
   private _makeObserver(obj: any): any {
     if (typeof obj !== 'object' || obj === null) return obj;
     if (Reflect.getOwnPropertyDescriptor(obj, SymObjectObserver)) return obj;
-    let _this = this;
-    let dependents = new ScopeDependents(this._scopeName);
     // 定义观察对象
     Reflect.defineProperty(obj, SymObjectObserver, {
-      value: dependents,
+      value: new ScopeDependents(this._scopeName),
       writable: false,
       enumerable: false,
     });
@@ -351,155 +485,10 @@ export class WorkerScope {
 
     if (obj instanceof Array) {
       // 创建数组观察对象
-      return new Proxy(obj, {
-        get(target, prop) {
-          let v = Reflect.get(target, prop);
-          if (typeof prop != 'string') return v;
-          if (typeof v === 'function') {
-            // 处理数组成员函数
-            if (prop === 'push')
-              return (...args: any[]) => {
-                let ret = Reflect.apply(v, target, args);
-                // 通知数组自身变更
-                _this._noticeSelfChanged(target);
-                // 跟踪新增加的数组成员
-                for (let i = 0; i < args.length; i++) {
-                  _this._traceObjectProp(target, (target.length - args.length + i).toString());
-                }
-                return ret;
-              };
-            return v;
-          }
-          // 处理数组成员属性
-          _this._traceObjectProp(obj, prop.toString());
-          if (prop === 'length') {
-            _this._traceObjectSelf(obj);
-          }
-
-          return v;
-        },
-        set(target, prop, value) {
-          _this._noticePropChanged(target, prop.toString());
-
-          return Reflect.set(obj, prop, _this._makeObserver(value));
-        },
-      });
+      return this._makeObserverArray(obj);
     } else {
-      // ================== 标准化对象属性处理 ==================
-      // 为对象所有自身属性创建get/set函数
-      Reflect.ownKeys(obj).forEach((k) => {
-        if (typeof k !== 'string') return;
-
-        // 为对象属性创建get/set函数
-        _this._makeObjectPropGetSet(obj, k);
-      });
-      // 为对象原型创建proxy,以在新建属性时创建观察对象
-      let oldProto = Reflect.getPrototypeOf(obj) || ({} as any);
-      if (typeof oldProto == 'object' && !Object.getOwnPropertyDescriptor(obj, SymScopeProto)) {
-        let newProto = Object.create(oldProto);
-        Object.defineProperty(newProto, SymScopeProto, {
-          value: true,
-        });
-
-        Reflect.setPrototypeOf(
-          obj,
-          new Proxy(newProto, {
-            get(target, prop) {
-              // 如果原型存在属性,则直接返回
-              if (Reflect.has(target, prop)) return Reflect.get(target, prop);
-              // 在原型获取属性时,添加跟踪对象
-              if (typeof prop !== 'string') return undefined;
-
-              // 如果属性不存在,则添加新属性到原始对象中并设置跟踪器对象,创建get/set函数以进行跟踪
-              Reflect.defineProperty(obj, prop, {
-                value: undefined,
-                writable: true,
-                enumerable: true,
-                configurable: true,
-              });
-              _this._makeObjectPropGetSet(obj, prop);
-
-              // 跟踪属性调用
-              _this._traceObjectProp(obj, prop);
-
-              return undefined;
-            },
-
-            set(target, prop, value, receiver) {
-              // 如果原型存在属性,则直接返回
-              if (Reflect.has(target, prop)) return Reflect.set(target, prop, value, receiver);
-              if (typeof prop !== 'string') {
-                // 非字符串对象，在原始对象上直接设置新属性
-                Reflect.defineProperty(obj, prop, { value, writable: true, enumerable: true, configurable: true });
-                return true;
-              }
-
-              let oldValue = Reflect.get(obj, prop);
-
-              // 设置新属性,将新属性设置到原始对象中,并启动跟踪和触发变更通知
-              Reflect.defineProperty(obj, prop, {
-                value: _this._makeObserver(value),
-                writable: true,
-                enumerable: true,
-                configurable: true,
-              });
-              log.info('newProperty', obj, prop, value);
-
-              // 创建get/set函数以进行跟踪
-              _this._makeObjectPropGetSet(obj, prop);
-
-              // 通知属性发生变更
-              _this._noticePropChanged(obj, prop);
-              // 当替换属性时,如果原属性为对象,由于整个对象被替换,需要深度递归通知原对象的全部依赖对象
-              // 定义递归访问时间戳,防止循环访问
-              let visitedTicks = new Date().getTime();
-              function _deepNoticeObj(obj: any) {
-                if (typeof obj !== 'object') return;
-
-                let objDependents = obj[SymObjectObserver] as ScopeDependents | undefined;
-                if (!objDependents) return;
-
-                // 防止循环遍历
-                if (Reflect.get(obj, SymObjectVisitTicks) === visitedTicks) return;
-
-                Reflect.defineProperty(obj, SymObjectVisitTicks, { value: visitedTicks });
-
-                // 通知对象自身的依赖
-                _this._noticeSelfChanged(obj);
-
-                Reflect.ownKeys(obj).forEach((k) => {
-                  if (typeof k !== 'string') return;
-                  // 通知对象的所有属性发生变更
-                  _this._noticePropChanged(obj, k);
-                  // 递归通知对象的属性
-                  let value = Reflect.get(obj, k);
-                  _deepNoticeObj(value);
-                });
-              }
-              // 通知监控原始对象的全部依赖对象
-              _deepNoticeObj(oldValue);
-
-              return true;
-            },
-            // 删除属性，需通知当前对象自身的依赖
-            deleteProperty(target, p) {
-              log.info('deleteProperty', obj, p);
-              // 删除对象
-              delete obj[p];
-              if (typeof p !== 'string') return true;
-              // 添加属性的变更通知
-              _this._noticePropChanged(obj, p);
-              // 添加当前对象的变更通知
-              _this._noticeSelfChanged(obj);
-
-              return true;
-            },
-          })
-        );
-      }
+      return this._makeObserverObject(obj);
     }
-
-    return obj;
   }
 
   // // 搜集作用域对象的所有属性,并生成执行函数

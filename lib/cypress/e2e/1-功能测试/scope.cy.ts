@@ -211,5 +211,103 @@ describe('WorkScope作用域', () => {
         expect(deferSelf.state, 'obj5自身未被触发').to.be.eq('pending');
       });
     });
+
+    it('scope添加对象obj6,跟踪子属性和obj自身,替换obj6的值,两个跟踪均被相应', () => {
+      let deferSelf = new Defer();
+      let deferChild = new Defer();
+      cy.wrap(scope.$rootScope).then(() => {
+        scope.$rootScope.obj6 = { a: 1, b: 2, c: 3 };
+        scope.traceCall(
+          'test-call-obj6',
+          () => {
+            return scope.$rootScope.obj6;
+          },
+          (v) => deferSelf.resolve(v)
+        );
+        scope.traceCall(
+          'test-call-obj6.a',
+          () => {
+            return scope.$rootScope.obj6.a;
+          },
+          (v) => deferChild.resolve(v)
+        );
+      });
+
+      cy.wrap(scope.$rootScope).then(() => {
+        scope.$rootScope.obj6 = { a: 11, b: 22, c: 33 };
+      });
+
+      cy.wrap(deferChild.promise).then((v) => {
+        expect(v, `获取obj6.a执行结果, 耗时:${deferSelf.duration}`).to.be.eq(11);
+        expect(deferChild.state, 'obj6.a得到响应').to.be.eq('resolved');
+      });
+
+      cy.wrap(deferSelf.promise).then((v:any) => {
+        expect(v.a, `获取obj6执行结果, 耗时:${deferSelf.duration}`).to.be.eq(11);
+        expect(deferSelf.state, 'obj6自身得到响应').to.be.eq('resolved');
+      });
+
+    });
+
+    it('scope添加对象obj7,跟踪子属性,多次变更子属性,仅执行一次变化跟踪', () => {
+      let defer = new Defer();
+      cy.wrap(scope.$rootScope).then(() => {
+        scope.$rootScope.obj7 = { a: 1, b: 2, c: 3 };
+        scope.traceCall(
+          'test-call-obj7.a',
+          () => {
+            return scope.$rootScope.obj7.a;
+          },
+          (v) => defer.resolve(v)
+        );
+      });
+
+      cy.wrap(scope.$rootScope).then(() => {
+        scope.$rootScope.obj7.a = 11;
+        scope.$rootScope.obj7.a = 12;
+        scope.$rootScope.obj7.a = 13;
+      });
+
+      cy.wrap(defer.promise).then((v) => {
+        expect(v, `获取obj7.a执行结果, 耗时:${defer.duration}`).to.be.eq(13);
+      });
+    })
+
+    it('scope添加对象obj8,删除子属性,子属性和自身同时得到响应', () => {
+      let deferSelf = new Defer();
+      let deferChild = new Defer();
+      cy.wrap(scope.$rootScope).then(() => {
+        scope.$rootScope.obj8 = { a: 1, b: 2, c: 3 };
+        scope.traceCall(
+          'test-call-obj8',
+          () => {
+            return scope.$rootScope.obj8;
+          },
+          (v) => deferSelf.resolve(v)
+        );
+        scope.traceCall(
+          'test-call-obj8.a',
+          () => {
+            return scope.$rootScope.obj8.a;
+          },
+          (v) => deferChild.resolve(v)
+        );
+      });
+
+      cy.wrap(scope.$rootScope).then(() => {
+        scope.$rootScope.obj8.a=undefined;
+        delete scope.$rootScope.obj8.a;
+      });
+
+      cy.wrap(deferChild.promise).then((v) => {
+        expect(v, `获取obj8.a执行结果, 耗时:${deferSelf.duration}`).to.be.undefined;
+      });
+
+      cy.wrap(deferSelf.promise).then((v:any) => {
+        cy.log('obj8:', v);
+        expect(v.a, `获取obj8执行结果, 耗时:${deferSelf.duration}`).to.be.undefined;
+      });
+    })
+
   });
 });
